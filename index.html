@@ -1,0 +1,503 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tyutor monitoring tizimi v2.0</title>
+    <script src="https://unpkg.com/docx@7.1.0/build/index.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+    <style>
+        :root { --p-color: #1a73e8; --s-color: #27ae60; --d-color: #f44336; --bg: #f4f7f6; }
+        body { font-family: 'Segoe UI', sans-serif; background-color: var(--bg); padding: 10px; margin: 0; }
+        .container { max-width: 900px; background: white; margin: 20px auto; padding: 25px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
+        .nav-tabs { display: flex; justify-content: center; gap: 10px; margin-bottom: 20px; }
+        .tab-btn { padding: 12px 25px; border: none; border-radius: 5px; cursor: pointer; background: #ddd; font-weight: bold; transition: 0.3s; }
+        .tab-btn.active { background: var(--p-color); color: white; }
+        .q-block { margin-bottom: 20px; padding: 15px; border-radius: 8px; border-left: 5px solid var(--p-color); background: #fafafa; }
+        .q-text { font-weight: 600; margin-bottom: 12px; color: #333; display: block; }
+        .options-group { display: flex; flex-direction: column; gap: 8px; }
+        select, input[type="text"], input[type="password"], textarea { width: 100%; padding: 12px; margin: 8px 0; border: 1px solid #ccc; border-radius: 6px; box-sizing: border-box; font-size: 15px; }
+        .btn-send { width: 100%; padding: 15px; background: var(--s-color); color: white; border: none; border-radius: 6px; font-size: 17px; cursor: pointer; font-weight: bold; }
+        .hidden { display: none; }
+        .stat-grid { display: grid; grid-template-columns: 1fr; gap: 20px; }
+        .stat-card { border: 1px solid #eee; padding: 15px; border-radius: 8px; background: #fff; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+        .stat-title { font-weight: bold; margin-bottom: 10px; color: #2c3e50; border-bottom: 1px solid #eee; padding-bottom: 5px; }
+        .bar-container { margin-bottom: 8px; }
+        .bar-label { font-size: 0.85em; display: flex; justify-content: space-between; margin-bottom: 3px; }
+        .bar-bg { background: #eee; height: 14px; border-radius: 7px; overflow: hidden; }
+        .bar-fill { height: 100%; background: var(--p-color); transition: width 0.5s; }
+        .kpi-box { background: linear-gradient(135deg, var(--p-color), #0d47a1); color: white; padding: 20px; border-radius: 10px; text-align: center; margin-bottom: 25px; }
+        .kpi-value { font-size: 32px; font-weight: bold; }
+        .faculty-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-bottom: 25px; }
+        .f-card { background: #fff; border: 1px solid #e0e0e0; padding: 15px; border-radius: 8px; text-align: center; }
+        .f-name { font-size: 0.85em; font-weight: bold; color: #666; margin-bottom: 5px; text-transform: uppercase; }
+        .f-count { font-size: 1.8em; font-weight: bold; color: var(--p-color); }
+        .admin-controls { display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap; }
+        .comment-box { background: #fff8e1; border-radius: 6px; padding: 10px; margin-top: 10px; font-size: 0.9em; border-left: 3px solid #ffc107; text-align: left; }
+        
+        /* Modal Styles */
+        .modal { display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.5); align-items: center; justify-content: center; }
+        .modal.active { display: flex; }
+        .modal-content { background: white; padding: 40px; border-radius: 12px; text-align: center; max-width: 400px; width: 90%; animation: slideIn 0.3s ease-out; box-shadow: 0 10px 30px rgba(0,0,0,0.2); }
+        @keyframes slideIn { from { transform: translateY(-30px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+        .success-icon { color: var(--s-color); font-size: 60px; margin-bottom: 20px; display: inline-block; animation: scaleUp 0.5s ease-out; }
+        @keyframes scaleUp { from { transform: scale(0); } to { transform: scale(1); } }
+        .modal h2 { margin: 0 0 10px; color: #2c3e50; font-size: 24px; }
+        .modal p { color: #666; margin-bottom: 25px; line-height: 1.5; }
+        .modal button { background: var(--p-color); color: white; border: none; padding: 14px 30px; border-radius: 6px; font-size: 16px; cursor: pointer; font-weight: bold; width: 100%; transition: background 0.3s; }
+        .modal button:hover { background: #1557b0; }
+    </style>
+</head>
+<body>
+
+<div class="nav-tabs">
+    <button class="tab-btn active" id="surveyBtn" onclick="showTab('survey')">SO'ROVNOMA</button>
+    <button class="tab-btn" id="adminBtn" onclick="showTab('login')">ADMIN PANEL</button>
+</div>
+
+<!-- SO'ROVNOMA SAHIFASI -->
+<div id="surveyPage" class="container">
+    <h2 style="text-align:center; color: var(--p-color);">TYUTOR FAOLIYATI MONITORINGI</h2>
+    <form id="surveyForm" onsubmit="submitForm(event)">
+        <div class="q-block">
+            <span class="q-text">Fakultet va Tyutorni tanlang:</span>
+            <select id="facultySelect" required onchange="filterTutors()">
+                <option value="">-- Fakultetni tanlang --</option>
+                <option value="Iqtisodiyot">Iqtisodiyot</option>
+                <option value="Pedagogika">Pedagogika</option>
+                <option value="Tarix va filalogiya">Tarix va filalogiya</option>
+                <option value="Axborot texnologiyalari">Axborot texnologiyalari</option>
+                <option value="Umum ta'lim">Umum ta'lim</option>
+            </select>
+            <select id="tutorSelect" required disabled>
+                <option value="">-- Avval fakultetni tanlang --</option>
+            </select>
+        </div>
+
+        <div class="q-block">
+            <span class="q-text">1. Tyutoringiz universitet "Odob-axloq kodeksi" bilan tanishtirganmi?</span>
+            <div class="options-group">
+                <label><input type="radio" name="q1" value="Ha, to'liq" required> Ha, to'liq</label>
+                <label><input type="radio" name="q1" value="Yuzaki tanishtirgan"> Yuzaki tanishtirgan</label>
+                <label><input type="radio" name="q1" value="Yo'q, tanishtirmagan"> Yo'q, tanishtirmagan</label>
+            </div>
+        </div>
+
+        <div class="q-block">
+            <span class="q-text">2. Tyutoringizning muomalasi va madaniyatini qanday baholaysiz?</span>
+            <div class="options-group">
+                <label><input type="radio" name="q2" value="A'lo" required> A'lo</label>
+                <label><input type="radio" name="q2" value="Yaxshi"> Yaxshi</label>
+                <label><input type="radio" name="q2" value="Qoniqarsiz"> Qoniqarsiz</label>
+            </div>
+        </div>
+
+        <div class="q-block">
+            <span class="q-text">3. Muammolaringizni hal qilishda tyutor qanchalik faol?</span>
+            <div class="options-group">
+                <label><input type="radio" name="q3" value="Doim yordam beradi" required> Doim yordam beradi</label>
+                <label><input type="radio" name="q3" value="Ba'zan yordam beradi"> Ba'zan yordam beradi</label>
+                <label><input type="radio" name="q3" value="Umuman yordam bermaydi"> Umuman yordam bermaydi</label>
+            </div>
+        </div>
+
+        <div class="q-block">
+            <span class="q-text">4. Turar joyingizga (ijara/TTJ) tyutor necha marta tashrif buyurdi?</span>
+            <div class="options-group">
+                <label><input type="radio" name="q4" value="Muntazam (3+ marta)" required> Muntazam (3+ marta)</label>
+                <label><input type="radio" name="q4" value="1-2 marta"> 1-2 marta</label>
+                <label><input type="radio" name="q4" value="Tashrif buyurmagan"> Tashrif buyurmagan</label>
+            </div>
+        </div>
+
+        <div class="q-block">
+            <span class="q-text">5. Tyutor ota-onangiz bilan aloqa qilib turadimi?</span>
+            <div class="options-group">
+                <label><input type="radio" name="q5" value="Ha, doimiy" required> Ha, doimiy</label>
+                <label><input type="radio" name="q5" value="Faqat zarurat tug'ilganda"> Faqat zarurat tug'ilganda</label>
+                <label><input type="radio" name="q5" value="Yo'q, umuman"> Yo'q, umuman</label>
+            </div>
+        </div>
+
+        <div class="q-block">
+            <span class="q-text">6. Pul yig'ish holatlari kuzatilganmi?</span>
+            <div class="options-group">
+                <label><input type="radio" name="q6" value="Umuman kuzatilmagan" required> Umuman kuzatilmagan</label>
+                <label><input type="radio" name="q6" value="Ba'zi holatlarda"> Ba'zi holatlarda</label>
+                <label><input type="radio" name="q6" value="Ha, kuzatilgan"> Ha, kuzatilgan</label>
+            </div>
+        </div>
+
+        <div class="q-block">
+            <span class="q-text">Qo'shimcha fikr va takliflaringiz:</span>
+            <textarea name="comment" rows="3" placeholder="Fikringizni shu yerga yozing (ixtiyoriy)..."></textarea>
+        </div>
+
+        <button type="submit" class="btn-send">SO'ROVNOMANI YUBORISH</button>
+    </form>
+</div>
+
+<!-- LOGIN SAHIFASI -->
+<div id="loginPage" class="container hidden" style="max-width:400px; text-align:center">
+    <h3>Admin Kirish</h3>
+    <input type="text" id="user" placeholder="Login">
+    <input type="password" id="pass" placeholder="Parol">
+    <button class="btn-send" style="background:var(--p-color)" onclick="checkAdmin()">Kirish</button>
+</div>
+
+<!-- ADMIN SAHIFASI -->
+<div id="adminPage" class="container hidden">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px">
+        <h2>Monitoring Natijalari</h2>
+        <button onclick="location.reload()" style="background:#666; color:white; border:none; padding:8px 15px; border-radius:4px; cursor:pointer">Chiqish</button>
+    </div>
+
+    <div class="faculty-stats" id="facultyStatsGrid"></div>
+
+    <div class="kpi-box">
+        <div id="adminTutorName" style="font-weight: bold; margin-bottom: 5px;">Tyutorni tanlang</div>
+        <div class="kpi-value" id="kpiValue">0%</div>
+        <div id="totalVotes" style="font-size: 0.9em; opacity: 0.9;">Jami ovozlar: 0</div>
+    </div>
+
+    <div class="filter-box" style="background: #eef2f7; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
+        <select id="tutorFilter" onchange="updateStats()">
+            <option value="">-- Natijalarni ko'rish uchun tyutorni tanlang --</option>
+        </select>
+        <div class="admin-controls" style="margin-top:15px">
+            <button class="tab-btn" style="background:#2b579a; color:white; flex: 1;" onclick="downloadWord()">Word Hisobot</button>
+            <button class="tab-btn" style="background:#27ae60; color:white; flex: 1;" onclick="downloadCSV()">CSV Yuklab Olish</button>
+            <button class="tab-btn" style="background:var(--d-color); color:white; flex: 1;" onclick="clearAllData()">Barchasini o'chirish</button>
+        </div>
+    </div>
+
+    <div class="stat-grid" id="adminStatsGrid"></div>
+    
+    <h3 id="commentTitle" class="hidden" style="margin-top: 30px; border-top: 2px solid #eee; padding-top: 20px;">Talabalar izohlari:</h3>
+    <div id="commentsSection"></div>
+</div>
+
+<script>
+    const GOOGLE_APP_URL = "https://script.google.com/macros/s/AKfycbzE8Wg-7ff8BOlEathz2HVsDweWe1dBxWyzbHS961OyV2BALG8rPeRHUkd8Lt5goneT/exec"; // Google Apps Script linki ulangan!
+
+    const tutorsByFaculty = {
+        "Iqtisodiyot": ["Otaboyev Azizbek O‘tkirbek o‘g‘li", "Saidmurodova Xurshidaxon Shuxratxo‘ja qizi", "Jalilov Feruz Yunusjon o‘g‘li", "Xudoyberdiyev Dilmurod Xasanovich", "Abduvaliyeva Dildora Baxtiyorovna"],
+        "Pedagogika": ["Irjigitova Shahnoza Abdumajidovna", "Abdurahmonova Ra’no Qudratullayevna", "Abdivaxidova Matluba Mo‘minjon qizi", "Aripova Lola Abduraufovna"],
+        "Tarix va filalogiya": ["Turdiyev Valijon Sobirjon o'g'li", "To‘xtaeva Nigora Tursunovna", "Aripova Maftuna Xoshimovna", "Karimov Hamid Olimovich", "Sanoqulova Umida Omonboyevna"],
+        "Axborot texnologiyalari": ["Barakayeva Bashorat Rahmatullayevna", "Madaminova Madina"],
+        "Umum ta'lim": ["Ahmedov Ravshanbek G‘ulomjonovich", "Abdullayev Akmaljon Erkinovich"]
+    };
+
+    const questions = {
+        q1: { text: "1. Kodeks bilan tanishtirish", options: ["Ha, to'liq", "Yuzaki tanishtirgan", "Yo'q, tanishtirmagan"], positive: "Ha, to'liq" },
+        q2: { text: "2. Muomala va madaniyat", options: ["A'lo", "Yaxshi", "Qoniqarsiz"], positive: "A'lo" },
+        q3: { text: "3. Muammolarni hal qilish", options: ["Doim yordam beradi", "Ba'zan yordam beradi", "Umuman yordam bermaydi"], positive: "Doim yordam beradi" },
+        q4: { text: "4. Yashash joyiga tashrif", options: ["Muntazam (3+ marta)", "1-2 marta", "Tashrif buyurmagan"], positive: "Muntazam (3+ marta)" },
+        q5: { text: "5. Ota-onalar bilan aloqa", options: ["Ha, doimiy", "Faqat zarurat tug'ilganda", "Yo'q, umuman"], positive: "Ha, doimiy" },
+        q6: { text: "6. Korrupsiya (pul yig'ish)", options: ["Umuman kuzatilmagan", "Ba'zi holatlarda", "Ha, kuzatilgan"], positive: "Umuman kuzatilmagan" }
+    };
+
+    // Sahifa yuklanganda tyutor filterini to'ldirish
+    function initTutorFilter() {
+        const filter = document.getElementById('tutorFilter');
+        for (let fac in tutorsByFaculty) {
+            let group = document.createElement('optgroup');
+            group.label = fac;
+            tutorsByFaculty[fac].forEach(t => {
+                let opt = document.createElement('option');
+                opt.value = t; opt.text = t;
+                group.appendChild(opt);
+            });
+            filter.appendChild(group);
+        }
+    }
+    initTutorFilter();
+
+    function filterTutors() {
+        const fac = document.getElementById('facultySelect').value;
+        const sel = document.getElementById('tutorSelect');
+        sel.innerHTML = '<option value="">-- Tyutorni tanlang --</option>';
+        if (fac && tutorsByFaculty[fac]) {
+            sel.disabled = false;
+            tutorsByFaculty[fac].forEach(t => {
+                let opt = document.createElement('option');
+                opt.value = t; opt.text = t;
+                sel.appendChild(opt);
+            });
+        } else sel.disabled = true;
+    }
+
+    async function submitForm(e) {
+        e.preventDefault();
+        const tutor = document.getElementById('tutorSelect').value;
+        const faculty = document.getElementById('facultySelect').value;
+        const formData = new FormData(e.target);
+        
+        const entry = { faculty: faculty, tutor: tutor };
+        formData.forEach((val, k) => entry[k] = val);
+        entry.date = new Date().toLocaleString();
+
+        try {
+            document.querySelector('.btn-send').innerText = "Yuborilmoqda. Iltimos kuting...";
+            document.querySelector('.btn-send').disabled = true;
+
+            const response = await fetch(GOOGLE_APP_URL, {
+                method: "POST",
+                body: JSON.stringify(entry),
+                headers: {
+                    "Content-Type": "text/plain;charset=utf-8",
+                }
+            });
+            const result = await response.json();
+
+            if(result.result === "success") {
+                document.getElementById('successModal').classList.add('active');
+            } else {
+                alert("Xatolik yuz berdi. Iltimos qaytadan urinib ko'ring.");
+                document.querySelector('.btn-send').innerText = "SO'ROVNOMANI YUBORISH";
+                document.querySelector('.btn-send').disabled = false;
+            }
+        } catch(err) {
+            console.error(err);
+            alert("Ulanishda xatolik yuz berdi. Internetni tekshiring va havolani to'g'ri o'rnatganingizga ishonch hosil qiling.");
+            document.querySelector('.btn-send').innerText = "SO'ROVNOMANI YUBORISH";
+            document.querySelector('.btn-send').disabled = false;
+        }
+    }
+
+    let globalData = [];
+
+    async function fetchDataFromGoogle() {
+        try {
+            const response = await fetch(GOOGLE_APP_URL);
+            globalData = await response.json();
+        } catch (e) {
+            console.error("Ma'lumot yuklashda xatolik", e);
+        }
+    }
+
+    function updateStats() {
+        const tutor = document.getElementById('tutorFilter').value;
+        const grid = document.getElementById('adminStatsGrid');
+        const commSec = document.getElementById('commentsSection');
+        grid.innerHTML = ''; commSec.innerHTML = '';
+        
+        if (!tutor) {
+            document.getElementById('adminTutorName').innerText = "Tyutorni tanlang";
+            document.getElementById('kpiValue').innerText = "0%";
+            document.getElementById('totalVotes').innerText = "Jami ovozlar: 0";
+            return;
+        }
+
+        const data = globalData.filter(d => d.tutor === tutor);
+        const total = data.length;
+
+        document.getElementById('adminTutorName').innerText = tutor;
+        document.getElementById('totalVotes').innerText = "Jami ovozlar: " + total;
+
+        let totalScore = 0;
+
+        for (let qK in questions) {
+            const q = questions[qK];
+            let card = `<div class="stat-card"><div class="stat-title">${q.text}</div>`;
+            
+            q.options.forEach(opt => {
+                const count = data.filter(d => d[qK] === opt).length;
+                const perc = total > 0 ? Math.round((count / total) * 100) : 0;
+                if(opt === q.positive) totalScore += perc;
+
+                card += `
+                    <div class="bar-container">
+                        <div class="bar-label"><span>${opt}</span><span>${count} ta (${perc}%)</span></div>
+                        <div class="bar-bg"><div class="bar-fill" style="width:${perc}%"></div></div>
+                    </div>`;
+            });
+            card += `</div>`;
+            grid.innerHTML += card;
+        }
+
+        const kpi = total > 0 ? Math.round(totalScore / 6) : 0;
+        document.getElementById('kpiValue').innerText = kpi + "%";
+
+        const comments = data.filter(d => d.comment && d.comment.trim() !== "");
+        if(comments.length > 0) {
+            document.getElementById('commentTitle').classList.remove('hidden');
+            comments.forEach(c => {
+                commSec.innerHTML += `<div class="comment-box"><b>[${c.date}]:</b> ${c.comment}</div>`;
+            });
+        } else {
+            document.getElementById('commentTitle').classList.add('hidden');
+        }
+
+        updateFacultyCounters();
+    }
+
+    function updateFacultyCounters() {
+        const grid = document.getElementById('facultyStatsGrid');
+        grid.innerHTML = '';
+        for (let fac in tutorsByFaculty) {
+            let facultyTotal = globalData.filter(d => d.faculty === fac).length;
+            const displayTotal = isNaN(facultyTotal) ? 0 : facultyTotal;
+
+            grid.innerHTML += `
+                <div class="f-card">
+                    <div class="f-name">${fac}</div>
+                    <div class="f-count">${displayTotal}</div>
+                </div>`;
+        }
+    }
+
+    async function checkAdmin() {
+        if (!GOOGLE_APP_URL || GOOGLE_APP_URL.includes("SHU_YERGA")) {
+            alert("Dasturda Xatolik: Google Apps Script linki qo'yilmagan!");
+            return;
+        }
+
+        if(document.getElementById('user').value === "TAFU" && document.getElementById('pass').value === "54321") {
+            document.getElementById('loginPage').classList.add('hidden');
+            document.getElementById('adminPage').classList.remove('hidden');
+            document.getElementById('adminTutorName').innerText = "Baza tekshirilmoqda, kuting...";
+            
+            await fetchDataFromGoogle();
+            
+            document.getElementById('adminTutorName').innerText = "Tyutorni tanlang";
+            updateStats();
+            updateFacultyCounters();
+        } else {
+            alert("Login yoki parol noto'g'ri!");
+        }
+    }
+
+    function showTab(t) {
+        document.getElementById('surveyPage').classList.add('hidden');
+        document.getElementById('loginPage').classList.add('hidden');
+        document.getElementById('adminPage').classList.add('hidden');
+        const btns = document.querySelectorAll('.tab-btn');
+        btns[0].classList.remove('active'); btns[1].classList.remove('active');
+        
+        if(t === 'survey') {
+            document.getElementById('surveyPage').classList.remove('hidden');
+            btns[0].classList.add('active');
+        } else {
+            document.getElementById('loginPage').classList.remove('hidden');
+            btns[1].classList.add('active');
+        }
+    }
+
+    function clearAllData() {
+        alert("Siz ma'lumotlarni bevosita Google Sheets orqali bazaga kirib tozalashingiz mumkin. Bu yerdan o'chirish Google Sheets bilan ulanganda faolsizlantiriladi.");
+    }
+
+    // WORD YUKLAB OLISH FUNKSIYASI
+    async function downloadWord() {
+        const tutor = document.getElementById('tutorFilter').value;
+        if(!tutor) return alert("Avval tyutorni tanlang!");
+        
+        const kpi = document.getElementById('kpiValue').innerText;
+        const totalVotes = document.getElementById('totalVotes').innerText;
+        const { Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell, WidthType, AlignmentType, HeadingLevel } = docx;
+        
+        const data = globalData.filter(d => d.tutor === tutor);
+
+        const tableRows = [
+            new TableRow({
+                children: [
+                    new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: "Savol", bold: true })] })] }),
+                    new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: "Natijalar", bold: true })] })] }),
+                ],
+            }),
+        ];
+
+        for (let qK in questions) {
+            let statsText = "";
+            questions[qK].options.forEach(opt => {
+                const count = data.filter(d => d[qK] === opt).length;
+                statsText += `${opt}: ${count} ta; `;
+            });
+
+            tableRows.push(new TableRow({
+                children: [
+                    new TableCell({ children: [new Paragraph(questions[qK].text)] }),
+                    new TableCell({ children: [new Paragraph(statsText)] }),
+                ],
+            }));
+        }
+
+        const doc = new Document({
+            sections: [{
+                children: [
+                    new Paragraph({ text: "TYUTOR MONITORING HISOBOTI", heading: HeadingLevel.HEADING_1, alignment: AlignmentType.CENTER }),
+                    new Paragraph({ children: [new TextRun({ text: "Tyutor: ", bold: true }), new TextRun(tutor)], spacing: { before: 400 } }),
+                    new Paragraph({ children: [new TextRun({ text: "KPI: ", bold: true }), new TextRun({ text: kpi, bold: true, color: "1a73e8" })] }),
+                    new Paragraph({ text: totalVotes, spacing: { after: 400 } }),
+                    new Table({ width: { size: 100, type: WidthType.PERCENTAGE }, rows: tableRows }),
+                ],
+            }],
+        });
+
+        Packer.toBlob(doc).then((blob) => {
+            saveAs(blob, tutor + "_hisobot.docx");
+        });
+    }
+
+    // CSV YUKLAB OLISH FUNKSIYASI (YANGI QO'SHILDI)
+    function downloadCSV() {
+        const tutor = document.getElementById('tutorFilter').value;
+        if(!tutor) return alert("Avval tyutorni tanlang!");
+        
+        const data = globalData.filter(d => d.tutor === tutor);
+        if(data.length === 0) return alert("Bu tyutorda hali ma'lumot yo'q!");
+
+        const headers = ["Sana", "Fakultet", "Tyutor", "1. Kodeks", "2. Madaniyat", "3. Yordam", "4. Tashrif", "5. Ota-onalar bn aloqa", "6. Pul yig'ish", "Izoh"];
+        const rows = [headers];
+
+        data.forEach(d => {
+            // HTML dagi barcha maydonlarni birma-bir csv ga moslash
+            rows.push([
+                d.date || "",
+                document.querySelector('#tutorFilter option:checked').parentNode.label || "",
+                tutor,
+                d.q1 || "",
+                d.q2 || "",
+                d.q3 || "",
+                d.q4 || "",
+                d.q5 || "",
+                d.q6 || "",
+                d.comment ? d.comment.replace(/\n/g, " ") : ""
+            ]);
+        });
+
+        const csvContent = "data:text/csv;charset=utf-8,\uFEFF" + rows.map(e => e.map(item => `"${item}"`).join(",")).join("\n");
+        const encodedUri = encodeURI(csvContent);
+        const link = document.createElement("a");
+        link.setAttribute("href", encodedUri);
+        link.setAttribute("download", tutor + "_natijalar.csv");
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    }
+
+    window.onload = () => {
+        if(!document.getElementById('adminPage').classList.contains('hidden')) {
+            updateFacultyCounters();
+        }
+    };
+    
+    function closeSuccessModal() {
+        document.getElementById('successModal').classList.remove('active');
+        location.reload();
+    }
+</script>
+
+<!-- Muaffaqiyatli saqlash modali -->
+<div id="successModal" class="modal">
+    <div class="modal-content">
+        <div class="success-icon">✔️</div>
+        <h2>Muvaffaqiyatli!</h2>
+        <p>Javobingiz tizimga qabul qilindi. Fikr va mulohazalaringiz universitet tajribasini yaxshilashda muhim hissa qo'shadi! Rahmat!</p>
+        <button onclick="closeSuccessModal()">Tugatish</button>
+    </div>
+</div>
+
+</body>
+</html>
